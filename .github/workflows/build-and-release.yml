@@ -1,0 +1,100 @@
+name: Build and Release Desktop App
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build core packages
+        run: pnpm build:core
+
+      - name: Build Desktop App
+        working-directory: apps/bubble-desktop
+        run: pnpm dist:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from package.json
+        id: get_version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./apps/bubble-desktop/package.json').version")
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Find built executable
+        id: find_exe
+        shell: bash
+        run: |
+          EXE_PATH=$(find apps/bubble-desktop/release -name "*.exe" -type f | head -1)
+          echo "exe_path=${EXE_PATH}" >> $GITHUB_OUTPUT
+          EXE_NAME=$(basename "${EXE_PATH}")
+          echo "exe_name=${EXE_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}-${{ github.run_number }}
+          name: BubbleLab Desktop v${{ steps.get_version.outputs.version }}
+          body: |
+            ## BubbleLab Desktop v${{ steps.get_version.outputs.version }}
+
+            ### Installation
+            Download the `.exe` file and run it directly (portable app, no installation required).
+
+            ### Requirements
+            - Windows 10 or later (x64)
+            - [Bun](https://bun.sh) runtime installed for backend functionality
+
+            ### Notes
+            - This is a portable executable that includes the BubbleLab frontend
+            - The backend requires Bun runtime to be installed separately
+            - Data is stored in your user profile directory
+
+            ### Commit
+            ${{ github.sha }}
+          files: ${{ steps.find_exe.outputs.exe_path }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -67,7 +67,7 @@ jobs:
         id: generate-tag
         shell: bash
         run: |
-          TAG="v$(date +'%Y.%m.%d')-$(echo ${{ github.sha }} | cut -c1-7)"
+          TAG="v$(date +'%Y.%m.%d.%H%M%S')-$(echo ${{ github.sha }} | cut -c1-7)"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release

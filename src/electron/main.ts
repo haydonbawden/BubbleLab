@@ -1,12 +1,15 @@
 import { app, BrowserWindow } from 'electron';
-import { fork, ChildProcess } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
+import * as http from 'http';
 
 let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcess | null = null;
 
 const BACKEND_PORT = process.env.BACKEND_PORT || '3001';
 const RENDERER_DEV_PORT = process.env.ELECTRON_DEV_PORT || '3000';
+const BACKEND_HEALTH_CHECK_INTERVAL = 500; // ms
+const BACKEND_HEALTH_CHECK_TIMEOUT = 30000; // ms
 
 /**
  * Get the path to the backend server entry point
@@ -28,6 +31,51 @@ function getBackendPath(): string {
 }
 
 /**
+ * Check if the backend is healthy by making an HTTP request
+ */
+function checkBackendHealth(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const req = http.get(`http://localhost:${BACKEND_PORT}/`, (res) => {
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', () => {
+      resolve(false);
+    });
+    req.setTimeout(1000, () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
+/**
+ * Wait for the backend to be healthy
+ */
+function waitForBackend(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+
+    const checkHealth = async () => {
+      const isHealthy = await checkBackendHealth();
+      if (isHealthy) {
+        console.log('Backend is healthy and ready');
+        resolve();
+        return;
+      }
+
+      if (Date.now() - startTime > BACKEND_HEALTH_CHECK_TIMEOUT) {
+        reject(new Error('Backend health check timeout'));
+        return;
+      }
+
+      setTimeout(checkHealth, BACKEND_HEALTH_CHECK_INTERVAL);
+    };
+
+    checkHealth();
+  });
+}
+
+/**
  * Start the backend server as a child process
  */
 function startBackend(): void {
@@ -35,13 +83,14 @@ function startBackend(): void {
   console.log(`Starting backend from: ${backendPath}`);
 
   try {
-    backendProcess = fork(backendPath, [], {
+    // Use spawn instead of fork for better compatibility with different runtimes
+    backendProcess = spawn('node', [backendPath], {
       env: {
         ...process.env,
         PORT: BACKEND_PORT,
         NODE_ENV: app.isPackaged ? 'production' : 'development',
       },
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     backendProcess.stdout?.on('data', (data: Buffer) => {
@@ -141,13 +190,18 @@ function createWindow(): void {
 }
 
 // App lifecycle events
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   startBackend();
 
-  // Wait a bit for the backend to start before creating the window
-  setTimeout(() => {
+  // Wait for the backend to be healthy before creating the window
+  try {
+    await waitForBackend();
     createWindow();
-  }, 2000);
+  } catch (error) {
+    console.error('Failed to start backend:', error);
+    // Create window anyway to show error state
+    createWindow();
+  }
 
   app.on('activate', () => {
     // On macOS, re-create window when dock icon is clicked

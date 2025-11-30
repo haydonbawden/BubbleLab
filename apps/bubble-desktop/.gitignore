@@ -21,3 +21,6 @@ npm-debug.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+# Do not ignore the build resources directory
+!build/

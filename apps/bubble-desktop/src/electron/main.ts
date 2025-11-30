@@ -59,7 +59,7 @@ async function startBackend(): Promise<void> {
   const env = {
     ...process.env,
     PORT: String(BACKEND_PORT),
-    BUBBLE_ENV: 'dev',
+    BUBBLE_ENV: isDev ? 'dev' : 'prod',
     DATABASE_URL: `file:${path.join(app.getPath('userData'), 'bubblelab.db')}`,
   };
 

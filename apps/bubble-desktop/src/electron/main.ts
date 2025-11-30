@@ -231,7 +231,23 @@ app.whenReady().then(async () => {
   protocol.registerFileProtocol('app', (request, callback) => {
     const url = request.url.replace('app://', '');
     const decodedUrl = decodeURIComponent(url);
-    callback({ path: path.normalize(decodedUrl) });
+    const normalizedPath = path.normalize(decodedUrl);
+
+    // Security: Ensure the path is within the app's resources
+    const appPath = app.isPackaged ? process.resourcesPath : app.getAppPath();
+    const resolvedPath = path.resolve(appPath, normalizedPath);
+
+    // Prevent path traversal attacks
+    if (!resolvedPath.startsWith(appPath)) {
+      console.error(
+        'Security: Blocked path traversal attempt:',
+        normalizedPath
+      );
+      callback({ error: -6 }); // NET_ERROR(FILE_NOT_FOUND)
+      return;
+    }
+
+    callback({ path: resolvedPath });
   });
 
   // Start the backend server

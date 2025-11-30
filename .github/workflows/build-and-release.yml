@@ -1,0 +1,106 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build application
+        run: pnpm run build
+
+      - name: Build Electron main process
+        run: pnpm run build:electron
+
+      - name: Build Windows installer
+        run: pnpm run dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Find installer
+        id: find-installer
+        shell: bash
+        run: |
+          INSTALLER_PATH=$(find release -name "*.exe" -type f | head -1)
+          echo "installer_path=$INSTALLER_PATH" >> $GITHUB_OUTPUT
+          INSTALLER_NAME=$(basename "$INSTALLER_PATH")
+          echo "installer_name=$INSTALLER_NAME" >> $GITHUB_OUTPUT
+
+      - name: Generate release tag
+        id: generate-tag
+        shell: bash
+        run: |
+          TAG="v$(date +'%Y.%m.%d')-$(echo ${{ github.sha }} | cut -c1-7)"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.generate-tag.outputs.tag }}
+          name: BubbleLab Desktop ${{ steps.generate-tag.outputs.tag }}
+          body: |
+            ## BubbleLab Desktop Release
+
+            This release contains the Windows x64 NSIS installer for BubbleLab Desktop.
+
+            ### Installation
+            1. Download the `.exe` installer below
+            2. Run the installer
+            3. Follow the installation wizard
+
+            ### What's included
+            - BubbleLab workflow builder (frontend)
+            - Local backend server (bundled)
+            - All required dependencies
+
+            **Commit:** ${{ github.sha }}
+            **Built on:** ${{ github.event.head_commit.timestamp }}
+          files: ${{ steps.find-installer.outputs.installer_path }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: ${{ steps.find-installer.outputs.installer_path }}
+          retention-days: 30

@@ -336,6 +336,50 @@ We welcome contributions! Feel free to:
 - Submit pull requests
 - [Join our Discord community](https://discord.gg/PkJvcU2myV) for discussions and support
 
+## 🖥️ Desktop App (Electron)
+
+BubbleLab can be packaged as a standalone Windows desktop application using Electron.
+
+### Building Locally
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build the desktop app (creates installer in release/ folder)
+pnpm run dist
+```
+
+### Development Mode
+
+```bash
+# Start the Electron app in development mode
+# (requires backend and frontend to be running separately)
+pnpm run start:electron
+```
+
+### Package Structure
+
+The packaged installer bundles:
+
+- **Frontend**: Built React app (Vite)
+- **Backend**: Local API server
+- **Electron wrapper**: Main process that manages the window and backend
+
+### Notes for Maintainers
+
+- The Electron main process is located at `src/electron/main.ts`
+- The preload script is at `src/electron/preload.ts`
+- electron-builder configuration is in `package.json` under the `"build"` key
+- The GitHub Actions workflow (`.github/workflows/build-and-release.yml`) builds the Windows NSIS installer on pushes to `main`
+
+**Path Assumptions:**
+
+- Backend entrypoint: `dist/backend/server.js`
+- Renderer build: `dist/renderer/index.html`
+
+If the actual build outputs differ, update `src/electron/main.ts` accordingly.
+
 ## License
 
 Apache 2.0

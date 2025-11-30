@@ -1,10 +1,16 @@
 {
   "name": "bubblelab",
   "private": true,
+  "main": "dist/electron/main.js",
   "scripts": {
     "build": "pnpm build:core && turbo build --filter=\"!@bubblelab/bubble-core\" --filter=\"!@bubblelab/shared-schemas\"",
     "build:all": "pnpm build:core && turbo build --filter=\"!@bubblelab/bubble-core\" --filter=\"!@bubblelab/shared-schemas\"",
     "build:core": "turbo build --filter=\"@bubblelab/shared-schemas\" --filter=\"@bubblelab/bubble-core\" --filter=\"@bubblelab/bubble-runtime\"",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:desktop": "pnpm run build && pnpm run build:electron",
+    "dist": "pnpm run build:desktop && electron-builder --win nsis --x64 --publish=never",
+    "pack": "pnpm run build:desktop && electron-builder --dir",
+    "start:electron": "pnpm run build:electron && electron .",
     "publish:packages": "pnpm build:core && pnpm --filter=\"@bubblelab/shared-schemas\" --filter=\"@bubblelab/bubble-core\" --filter=\"@bubblelab/bubble-runtime\" --filter=\"create-bubblelab-app\" --filter=\"@bubblelab/ts-scope-manager\" publish --access public",
     "setup:env": "bash setup-env.sh",
     "dev": "pnpm setup:env && pnpm build:core && turbo dev --filter=\"bubblelab-api\" --filter=\"bubble-studio\"",
@@ -34,6 +40,8 @@
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "dotenv": "^17.2.0",
+    "electron": "^32.2.7",
+    "electron-builder": "^25.1.8",
     "eslint": "^9.31.0",
     "glob": "^11.0.0",
     "husky": "^8.0.3",
@@ -66,5 +74,44 @@
       "typescript": "^5.8.3"
     }
   },
-  "dependencies": {}
+  "dependencies": {},
+  "build": {
+    "appId": "ai.bubblelab.desktop",
+    "productName": "BubbleLab",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "apps/bubble-studio/dist",
+        "to": "app/dist/renderer",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "apps/bubble-studio/public/favicon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
 }

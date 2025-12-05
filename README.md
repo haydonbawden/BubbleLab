@@ -380,10 +380,13 @@ pnpm install
 # 2. Build TypeScript and renderer
 pnpm run build
 
-# 3. Start Electron in development mode
+# 3. Quick development mode (only builds Electron main process)
+pnpm run dev:electron
+
+# 4. Full start with complete build
 pnpm run start:electron
 
-# 4. Build NSIS installer (creates release/ directory)
+# 5. Build NSIS installer (creates release/ directory)
 pnpm run dist
 ```
 
@@ -391,16 +394,23 @@ The NSIS installer will be generated in the `release/` directory.
 
 ### Implementation Notes
 
-- Backend entrypoint: `dist/backend/server.js`
-- Renderer output: `dist/renderer/index.html`
-- If these paths differ in your setup, update `src/electron/main.ts` before building
+- **Backend**: Runs `apps/bubblelab-api/src/index.ts` using Bun runtime (not Node.js)
+- **Renderer**: Loads from `apps/bubble-studio/dist` in development, packaged in `resources/renderer` in production
+- **IPC Security**: Uses channel allowlist in `src/electron/preload.ts` for secure communication
+- **Backend Readiness**: Waits for backend to be ready before creating the window
+- **Error Handling**: Shows user-friendly dialogs if Bun or backend files are missing
+
+### Requirements
+
+- [Bun](https://bun.sh) runtime must be installed for backend functionality
+- The Electron app will detect Bun automatically from common installation paths
 
 ### GitHub Actions
 
 The `.github/workflows/build-and-release.yml` workflow automatically:
 - Builds the NSIS installer on pushes to main
-- Creates a GitHub Release with version tag
-- Uploads the installer as a release asset
+- Creates a GitHub Release with unique version tag (includes run number)
+- Uploads the installer directly as a release file using softprops/action-gh-release
 
 ## 🤝 Contributing
 

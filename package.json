@@ -29,7 +29,7 @@
     "prepare": "husky install",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
     "build:renderer": "turbo build --filter=bubble-studio",
-    "dev:electron": "tsc --project tsconfig.json --outDir dist/electron src/electron/*.ts && electron .",
+    "dev:electron": "tsc --project tsconfig.json && electron .",
     "start:electron": "pnpm run build && electron .",
     "dist": "pnpm run build && electron-builder --win nsis --x64 --publish=never",
     "pack": "pnpm run build && electron-builder --dir"

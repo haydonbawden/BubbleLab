@@ -171,8 +171,9 @@ async function startBackend(): Promise<void> {
   
   // Copy only allowed environment variables
   for (const key of allowedEnvVars) {
-    if (process.env[key]) {
-      env[key] = process.env[key]!;
+    const value = process.env[key];
+    if (value !== undefined && value !== null) {
+      env[key] = value;
     }
   }
 
@@ -269,14 +270,36 @@ app.whenReady().then(async () => {
     await startBackend();
   } catch (err) {
     console.error('Failed to start backend:', err);
+    // Show error dialog for unexpected errors
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Startup Error',
+      message: 'Failed to initialize the application',
+      detail: `An unexpected error occurred during startup: ${err instanceof Error ? err.message : String(err)}`,
+      buttons: ['OK'],
+    });
   }
   
   // Create window after backend is ready (or failed to start)
-  await createWindow();
+  try {
+    await createWindow();
+  } catch (err) {
+    console.error('Failed to create window:', err);
+  }
 });
 
-app.on('before-quit', async () => {
-  await stopBackend();
+app.on('before-quit', async (event) => {
+  // Prevent default quit to ensure backend stops properly
+  event.preventDefault();
+  
+  try {
+    await stopBackend();
+  } catch (err) {
+    console.error('Error stopping backend:', err);
+  }
+  
+  // Now allow the app to quit
+  app.exit(0);
 });
 
 app.on('window-all-closed', () => {

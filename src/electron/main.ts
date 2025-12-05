@@ -81,6 +81,8 @@ function findBunExecutable(): string | null {
 /**
  * Wait for the backend server to be ready
  */
+const BACKEND_STOP_TIMEOUT_MS = 5000;
+
 async function waitForBackend(
   maxRetries = 30,
   retryDelay = 1000
@@ -89,9 +91,14 @@ async function waitForBackend(
     try {
       const response = await fetch(`http://localhost:${BACKEND_PORT}/`);
       if (response.ok) {
-        // Validate response is actually from our backend
+        // Validate response is actually from our BubbleLab backend
         const data = await response.json();
-        if (data && typeof data === 'object' && 'message' in data) {
+        if (
+          data &&
+          typeof data === 'object' &&
+          'message' in data &&
+          data.message === 'BubbleLab API is running!'
+        ) {
           console.log('Backend is ready!');
           return;
         }
@@ -149,6 +156,9 @@ async function startBackend(): Promise<void> {
 
   // Set up environment variables for the backend
   // Use allowlist to avoid exposing sensitive environment variables
+  // Note: API keys are required for the backend to function properly
+  // and are intentionally passed through. Consider using a more secure
+  // credential storage mechanism for production deployments.
   const allowedEnvVars = [
     'NODE_ENV',
     'PATH',
@@ -225,7 +235,7 @@ function stopBackend(): Promise<void> {
         }
       }
       resolve();
-    }, 5000); // 5 second timeout
+    }, BACKEND_STOP_TIMEOUT_MS);
 
     // Listen for process exit
     backendProcess.once('exit', () => {

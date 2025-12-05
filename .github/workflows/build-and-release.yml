@@ -44,9 +44,8 @@ jobs:
       - name: Build (TypeScript and renderer)
         run: pnpm run build
 
-      - name: Build backend and renderer artifacts
-        run: |
-          pnpm run build:renderer
+      - name: Build renderer artifacts
+        run: pnpm run build:renderer
 
       - name: Create Windows NSIS installer
         run: pnpm run dist

@@ -89,8 +89,12 @@ async function waitForBackend(
     try {
       const response = await fetch(`http://localhost:${BACKEND_PORT}/`);
       if (response.ok) {
-        console.log('Backend is ready!');
-        return;
+        // Validate response is actually from our backend
+        const data = await response.json();
+        if (data && typeof data === 'object' && 'message' in data) {
+          console.log('Backend is ready!');
+          return;
+        }
       }
     } catch {
       // Backend not ready yet
@@ -144,11 +148,33 @@ async function startBackend(): Promise<void> {
   }
 
   // Set up environment variables for the backend
-  const env = {
-    ...process.env,
+  // Use allowlist to avoid exposing sensitive environment variables
+  const allowedEnvVars = [
+    'NODE_ENV',
+    'PATH',
+    'HOME',
+    'USERPROFILE',
+    'TEMP',
+    'TMP',
+    'BUN_INSTALL',
+    'DATABASE_URL',
+    'GOOGLE_API_KEY',
+    'OPENROUTER_API_KEY',
+    'OPENAI_API_KEY',
+    'CLERK_SECRET_KEY',
+  ];
+  
+  const env: Record<string, string> = {
     PORT: String(BACKEND_PORT),
     ELECTRON: 'true',
   };
+  
+  // Copy only allowed environment variables
+  for (const key of allowedEnvVars) {
+    if (process.env[key]) {
+      env[key] = process.env[key]!;
+    }
+  }
 
   console.log(`Starting backend with Bun: ${bunPath} run ${backendPath}`);
 
@@ -237,7 +263,7 @@ async function createWindow() {
   });
 }
 
-app.on('ready', async () => {
+app.whenReady().then(async () => {
   try {
     // Start backend and wait for it to be ready before creating window
     await startBackend();

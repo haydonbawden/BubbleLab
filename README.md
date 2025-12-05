@@ -365,6 +365,43 @@ The executable will be generated in `apps/bubble-desktop/release/`.
 - Windows 10 or later (x64)
 - [Bun](https://bun.sh) runtime (for backend functionality)
 
+## 📦 Electron Desktop Packaging (NSIS Installer)
+
+This repository also includes an Electron-based desktop wrapper with Windows x64 NSIS installer support.
+
+### Building the NSIS Installer
+
+To build the NSIS installer locally:
+
+```bash
+# 1. Install dependencies
+pnpm install
+
+# 2. Build TypeScript and renderer
+pnpm run build
+
+# 3. Start Electron in development mode
+pnpm run start:electron
+
+# 4. Build NSIS installer (creates release/ directory)
+pnpm run dist
+```
+
+The NSIS installer will be generated in the `release/` directory.
+
+### Implementation Notes
+
+- Backend entrypoint: `dist/backend/server.js`
+- Renderer output: `dist/renderer/index.html`
+- If these paths differ in your setup, update `src/electron/main.ts` before building
+
+### GitHub Actions
+
+The `.github/workflows/build-and-release.yml` workflow automatically:
+- Builds the NSIS installer on pushes to main
+- Creates a GitHub Release with version tag
+- Uploads the installer as a release asset
+
 ## 🤝 Contributing
 
 We welcome contributions! Feel free to:

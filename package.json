@@ -1,6 +1,8 @@
 {
   "name": "bubblelab",
+  "version": "1.0.0",
   "private": true,
+  "main": "dist/electron/main.js",
   "scripts": {
     "build": "pnpm build:core && turbo build --filter=\"!@bubblelab/bubble-core\" --filter=\"!@bubblelab/shared-schemas\"",
     "build:all": "pnpm build:core && turbo build --filter=\"!@bubblelab/bubble-core\" --filter=\"!@bubblelab/shared-schemas\"",
@@ -25,7 +27,11 @@
     "docs:build": "cd docs && pnpm build",
     "docs:serve": "cd docs && pnpm serve",
     "prepare": "husky install",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run test"
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
+    "build:renderer": "pnpm run build",
+    "start:electron": "pnpm run build && electron .",
+    "dist": "pnpm run build && electron-builder --win nsis --x64 --publish=never",
+    "pack": "pnpm run build && electron-builder --dir"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
@@ -46,7 +52,10 @@
     "turbo": "^1.13.4",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.0.0",
-    "zod-to-json-schema": "^3.24.6"
+    "zod-to-json-schema": "^3.24.6",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "tslib": "^2.8.1"
   },
   "packageManager": "pnpm@10.16.1",
   "engines": {
@@ -66,5 +75,13 @@
       "typescript": "^5.8.3"
     }
   },
-  "dependencies": {}
+  "dependencies": {},
+  "build": {
+    "appId": "com.haydonbawden.bubblelab",
+    "productName": "BubbleLab",
+    "files": ["dist/**/*", "package.json", "node_modules/**/*"],
+    "asar": true,
+    "directories": {"output": "release"},
+    "win": {"target": [{"target": "nsis", "arch": ["x64"]}]}
+  }
 }

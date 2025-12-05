@@ -1,8 +1,9 @@
-name: Build and Release Desktop App
+name: Build and release Windows NSIS installer
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -10,20 +11,14 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -46,55 +41,44 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build core packages
-        run: pnpm build:core
+      - name: Build (TypeScript and renderer)
+        run: pnpm run build
 
-      - name: Build Desktop App
-        working-directory: apps/bubble-desktop
-        run: pnpm dist:win
+      - name: Create Windows NSIS installer
+        run: pnpm run dist
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CI: true
 
-      - name: Get version from package.json
+      - name: Find installer
+        id: find_installer
+        run: |
+          $exe = (Get-ChildItem -Path . -Recurse -Filter *.exe | Where-Object { $_.FullName -notmatch 'node_modules' } | Select-Object -First 1).FullName
+          if (-not $exe) { Write-Error "No exe found"; exit 1 }
+          Write-Host "Found exe: $exe"
+          echo "installer=$exe" >> $env:GITHUB_OUTPUT
+
+      - name: Get version
         id: get_version
-        shell: bash
         run: |
-          VERSION=$(node -p "require('./apps/bubble-desktop/package.json').version")
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Find built executable
-        id: find_exe
-        shell: bash
-        run: |
-          EXE_PATH=$(find apps/bubble-desktop/release -name "*.exe" -type f | head -1)
-          echo "exe_path=${EXE_PATH}" >> $GITHUB_OUTPUT
-          EXE_NAME=$(basename "${EXE_PATH}")
-          echo "exe_name=${EXE_NAME}" >> $GITHUB_OUTPUT
+          $v = node -p "require('./package.json').version"
+          echo "version=$v" >> $env:GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        id: create_release
+        uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}-${{ github.run_number }}
-          name: BubbleLab Desktop v${{ steps.get_version.outputs.version }}
-          body: |
-            ## BubbleLab Desktop v${{ steps.get_version.outputs.version }}
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: "Release v${{ steps.get_version.outputs.version }}"
+          body: "Automated NSIS installer release from main"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-            ### Installation
-            Download the `.exe` file and run it directly (portable app, no installation required).
-
-            ### Requirements
-            - Windows 10 or later (x64)
-            - [Bun](https://bun.sh) runtime installed for backend functionality
-
-            ### Notes
-            - This is a portable executable that includes the BubbleLab frontend
-            - The backend requires Bun runtime to be installed separately
-            - Data is stored in your user profile directory
-
-            ### Commit
-            ${{ github.sha }}
-          files: ${{ steps.find_exe.outputs.exe_path }}
-          draft: false
-          prerelease: false
+      - name: Upload installer to Release
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ${{ steps.find_installer.outputs.installer }}
+          asset_name: "BubbleLab-Setup-v${{ steps.get_version.outputs.version }}-windows-x64.exe"
+          asset_content_type: application/octet-stream
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

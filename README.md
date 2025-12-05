@@ -327,6 +327,44 @@ BubbleLab is built on a modular architecture with the following core packages:
 
 For Docker-based deployment instructions, see **[deployment/README.md](./deployment/README.md)**.
 
+## 🖥️ Desktop App (Windows)
+
+BubbleLab is also available as a standalone Windows desktop application.
+
+### Download
+
+Download the latest release from the [Releases](https://github.com/bubblelabai/BubbleLab/releases) page.
+
+### Build Locally
+
+To build the desktop app locally:
+
+```bash
+# 1. Install dependencies
+pnpm install
+
+# 2. Build core packages
+pnpm build:core
+
+# 3. Build the desktop app
+cd apps/bubble-desktop
+pnpm dist:win
+```
+
+The executable will be generated in `apps/bubble-desktop/release/`.
+
+### How It Works
+
+- **Frontend**: The visual workflow builder (Bubble Studio) is bundled within the app
+- **Backend**: The API server requires [Bun](https://bun.sh) runtime to be installed
+- **Data Storage**: SQLite database stored in your user profile directory
+- **No Installation Required**: The portable `.exe` runs directly without installation
+
+### Requirements
+
+- Windows 10 or later (x64)
+- [Bun](https://bun.sh) runtime (for backend functionality)
+
 ## 🤝 Contributing
 
 We welcome contributions! Feel free to:

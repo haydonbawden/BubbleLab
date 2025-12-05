@@ -1,0 +1,70 @@
+{
+  "name": "bubble-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "BubbleLab Desktop Application",
+  "main": "dist/electron/main.js",
+  "author": "BubbleLab",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:frontend": "cd ../bubble-studio && pnpm build",
+    "build": "pnpm build:electron && pnpm build:frontend",
+    "start": "electron .",
+    "dist": "pnpm build && electron-builder --win portable --x64 --publish=never",
+    "dist:win": "pnpm build && electron-builder --win portable --x64 --publish=never",
+    "pack": "electron-builder --dir"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.8.3"
+  },
+  "build": {
+    "appId": "com.bubblelab.desktop",
+    "productName": "BubbleLab",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../bubble-studio/dist",
+        "to": "frontend",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../bubblelab-api",
+        "to": "backend",
+        "filter": [
+          "src/**/*",
+          "package.json",
+          "drizzle-sqlite/**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "BubbleLab-${version}-portable.exe"
+    },
+    "asar": true
+  }
+}

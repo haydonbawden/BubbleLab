@@ -90,7 +90,7 @@
       {
         "from": "apps/bubblelab-api",
         "to": "backend",
-        "filter": ["src/**/*", "package.json", "drizzle-sqlite/**/*"]
+        "filter": ["src/**/*", "package.json", "drizzle-sqlite/**/*.js", "drizzle-sqlite/**/*.json"]
       }
     ],
     "asar": true,

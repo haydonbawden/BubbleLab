@@ -27,7 +27,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       };
     } else {
       console.error(`IPC on blocked: channel "${channel}" not in allowlist`);
-      return () => {}; // Return no-op cleanup
+      return () => {
+        console.warn(`Attempted to clean up listener for blocked IPC channel "${channel}". No listener was registered.`);
+      }; // Return no-op cleanup with warning
     }
   },
 });

@@ -92,7 +92,13 @@ async function waitForBackend(
       const response = await fetch(`http://localhost:${BACKEND_PORT}/`);
       if (response.ok) {
         // Validate response is actually from our BubbleLab backend
-        const data = await response.json();
+        let data;
+        try {
+          data = await response.json();
+        } catch {
+          // Response was not valid JSON; treat as not ready and retry
+          continue;
+        }
         if (
           data &&
           typeof data === 'object' &&
@@ -298,7 +304,7 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('before-quit', async (event) => {
+app.on('will-quit', async (event) => {
   // Prevent default quit to ensure backend stops properly
   event.preventDefault();
   

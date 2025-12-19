@@ -28,7 +28,8 @@
     "docs:serve": "cd docs && pnpm serve",
     "prepare": "husky install",
     "check": "pnpm run typecheck && pnpm run lint && pnpm run test",
-    "build:renderer": "pnpm run build",
+    "build:renderer": "turbo build --filter=bubble-studio",
+    "dev:electron": "tsc --project tsconfig.json && electron .",
     "start:electron": "pnpm run build && electron .",
     "dist": "pnpm run build && electron-builder --win nsis --x64 --publish=never",
     "pack": "pnpm run build && electron-builder --dir"
@@ -79,7 +80,19 @@
   "build": {
     "appId": "com.haydonbawden.bubblelab",
     "productName": "BubbleLab",
-    "files": ["dist/**/*", "package.json", "node_modules/**/*"],
+    "files": ["dist/**/*", "package.json"],
+    "extraResources": [
+      {
+        "from": "apps/bubble-studio/dist",
+        "to": "renderer",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "apps/bubblelab-api",
+        "to": "backend",
+        "filter": ["src/**/*", "package.json", "drizzle-sqlite/**/*.js", "drizzle-sqlite/**/*.json"]
+      }
+    ],
     "asar": true,
     "directories": {"output": "release"},
     "win": {"target": [{"target": "nsis", "arch": ["x64"]}]}

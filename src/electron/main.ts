@@ -1,16 +1,20 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, dialog } from 'electron';
 import * as path from 'path';
-import { fork, ChildProcess } from 'child_process';
+import { spawn, spawnSync, ChildProcess } from 'child_process';
 import { existsSync } from 'fs';
 
 let mainWindow: BrowserWindow | null = null;
 let backendProcess: ChildProcess | null = null;
 
+const BACKEND_PORT = 3001;
+
 function resolveBackendPath(): string {
   if (!app.isPackaged) {
-    return path.resolve(__dirname, '..', '..', 'dist', 'backend', 'server.js');
+    // Development: Use actual backend entrypoint with Bun runtime
+    return path.resolve(__dirname, '..', '..', 'apps', 'bubblelab-api', 'src', 'index.ts');
   }
-  return path.join(process.resourcesPath, 'dist', 'backend', 'server.js');
+  // Production: Backend should be in resources
+  return path.join(process.resourcesPath, 'backend', 'src', 'index.ts');
 }
 
 function resolveRendererURL(): string {
@@ -18,24 +22,192 @@ function resolveRendererURL(): string {
     const port = process.env.ELECTRON_DEV_PORT || '3000';
     return `http://localhost:${port}`;
   }
-  const indexPath = path.join(process.resourcesPath, 'dist', 'renderer', 'index.html');
+  // Production: Renderer should be in resources
+  const indexPath = path.join(process.resourcesPath, 'renderer', 'index.html');
   return `file://${indexPath}`;
 }
 
-function startBackend() {
+/**
+ * Find the Bun executable
+ */
+function findBunExecutable(): string | null {
+  const bunPaths = [
+    // Common installation paths
+    process.env.BUN_INSTALL
+      ? path.join(process.env.BUN_INSTALL, 'bin', 'bun')
+      : null,
+    path.join(
+      process.env.HOME || process.env.USERPROFILE || '',
+      '.bun',
+      'bin',
+      'bun'
+    ),
+    // Windows paths
+    path.join(
+      process.env.HOME || process.env.USERPROFILE || '',
+      '.bun',
+      'bin',
+      'bun.exe'
+    ),
+    // System paths (will be resolved via PATH)
+    'bun',
+    'bun.exe',
+  ].filter(Boolean) as string[];
+
+  for (const bunPath of bunPaths) {
+    try {
+      // Check if it's an absolute path and exists
+      if (path.isAbsolute(bunPath) && existsSync(bunPath)) {
+        return bunPath;
+      }
+      // For non-absolute paths, try to spawn to check if it's in PATH
+      if (!path.isAbsolute(bunPath)) {
+        const result = spawnSync(bunPath, ['--version'], {
+          timeout: 5000,
+          encoding: 'utf8',
+        });
+        if (result.status === 0) {
+          return bunPath;
+        }
+      }
+    } catch {
+      // Continue to next path
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Wait for the backend server to be ready
+ */
+const BACKEND_STOP_TIMEOUT_MS = 5000;
+
+async function waitForBackend(
+  maxRetries = 30,
+  retryDelay = 1000
+): Promise<void> {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const response = await fetch(`http://localhost:${BACKEND_PORT}/`);
+      if (response.ok) {
+        // Validate response is actually from our BubbleLab backend
+        let data;
+        try {
+          data = await response.json();
+        } catch {
+          // Response was not valid JSON; treat as not ready and retry
+          continue;
+        }
+        if (
+          data &&
+          typeof data === 'object' &&
+          'message' in data &&
+          data.message === 'BubbleLab API is running!'
+        ) {
+          console.log('Backend is ready!');
+          return;
+        }
+      }
+    } catch {
+      // Backend not ready yet
+    }
+    await new Promise((resolve) => setTimeout(resolve, retryDelay));
+  }
+  console.warn('Backend did not become ready within timeout');
+}
+
+async function startBackend(): Promise<void> {
   const backendPath = resolveBackendPath();
+  
   if (!existsSync(backendPath)) {
     console.error('Backend entrypoint not found at:', backendPath);
+    
+    // Show user-facing dialog when backend is missing
+    const result = await dialog.showMessageBox({
+      type: 'error',
+      title: 'Backend Not Found',
+      message: 'Backend entrypoint is missing',
+      detail: `Expected path: ${backendPath}\n\nPlease ensure the backend is built and available at the expected location. The application cannot function without the backend.`,
+      buttons: ['Exit', 'Continue Anyway'],
+      defaultId: 0,
+      cancelId: 0,
+    });
+    
+    if (result.response === 0) {
+      app.quit();
+      return;
+    }
+    
+    console.warn('User chose to continue without backend');
     return;
   }
 
-  backendProcess = fork(backendPath, [], {
+  // Check if bun is available
+  const bunPath = findBunExecutable();
+
+  if (!bunPath) {
+    console.warn('Bun runtime not found. Backend will not start automatically.');
+    
+    await dialog.showMessageBox({
+      type: 'warning',
+      title: 'Bun Runtime Not Found',
+      message: 'Bun runtime is required to run the backend',
+      detail: 'Please install Bun from https://bun.sh and restart the application.',
+      buttons: ['OK'],
+    });
+    
+    return;
+  }
+
+  // Set up environment variables for the backend
+  // Use allowlist to avoid exposing sensitive environment variables
+  // Note: API keys are required for the backend to function properly
+  // and are intentionally passed through. Consider using a more secure
+  // credential storage mechanism for production deployments.
+  const allowedEnvVars = [
+    'NODE_ENV',
+    'PATH',
+    'HOME',
+    'USERPROFILE',
+    'TEMP',
+    'TMP',
+    'BUN_INSTALL',
+    'DATABASE_URL',
+    'GOOGLE_API_KEY',
+    'OPENROUTER_API_KEY',
+    'OPENAI_API_KEY',
+    'CLERK_SECRET_KEY',
+  ];
+  
+  const env: Record<string, string> = {
+    PORT: String(BACKEND_PORT),
+    ELECTRON: 'true',
+  };
+  
+  // Copy only allowed environment variables
+  for (const key of allowedEnvVars) {
+    const value = process.env[key];
+    if (value !== undefined && value !== null) {
+      env[key] = value;
+    }
+  }
+
+  console.log(`Starting backend with Bun: ${bunPath} run ${backendPath}`);
+
+  // Launch backend with Bun (not child_process.fork)
+  backendProcess = spawn(bunPath, ['run', backendPath], {
     cwd: path.dirname(backendPath),
-    env: {
-      ...process.env,
-      ELECTRON: 'true',
-    },
-    stdio: 'inherit',
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  backendProcess.stdout?.on('data', (data) => {
+    console.log(`[Backend] ${data.toString().trim()}`);
+  });
+
+  backendProcess.stderr?.on('data', (data) => {
+    console.error(`[Backend Error] ${data.toString().trim()}`);
   });
 
   backendProcess.on('error', (err) => {
@@ -43,22 +215,53 @@ function startBackend() {
   });
 
   backendProcess.on('exit', (code, signal) => {
-    console.log('Backend process exited', { code, signal });
+    console.log(`Backend exited with code ${code}, signal ${signal}`);
     backendProcess = null;
+  });
+
+  // Wait for backend to be ready before proceeding
+  await waitForBackend();
+}
+
+function stopBackend(): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (!backendProcess || backendProcess.killed) {
+      resolve();
+      return;
+    }
+
+    // Set a timeout to force kill if graceful shutdown fails
+    const forceKillTimeout = setTimeout(() => {
+      if (backendProcess && !backendProcess.killed) {
+        console.warn('Force killing backend process after timeout');
+        try {
+          backendProcess.kill('SIGKILL');
+        } catch (e) {
+          console.error('Failed to force kill backend:', e);
+        }
+      }
+      resolve();
+    }, BACKEND_STOP_TIMEOUT_MS);
+
+    // Listen for process exit
+    backendProcess.once('exit', () => {
+      clearTimeout(forceKillTimeout);
+      backendProcess = null;
+      resolve();
+    });
+
+    // Attempt graceful shutdown
+    try {
+      backendProcess.kill('SIGTERM');
+    } catch (e) {
+      console.warn('Failed to send SIGTERM to backend:', e);
+      clearTimeout(forceKillTimeout);
+      resolve();
+    }
   });
 }
 
-function stopBackend() {
-  if (backendProcess && !backendProcess.killed) {
-    try {
-      backendProcess.kill();
-    } catch (e) {
-      console.warn('Failed to stop backend process', e);
-    }
-  }
-}
-
-function createWindow() {
+async function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -77,17 +280,42 @@ function createWindow() {
   });
 }
 
-app.on('ready', () => {
+app.whenReady().then(async () => {
   try {
-    startBackend();
+    // Start backend and wait for it to be ready before creating window
+    await startBackend();
   } catch (err) {
     console.error('Failed to start backend:', err);
+    // Show error dialog for unexpected errors
+    await dialog.showMessageBox({
+      type: 'error',
+      title: 'Startup Error',
+      message: 'Failed to initialize the application',
+      detail: `An unexpected error occurred during startup: ${err instanceof Error ? err.message : String(err)}`,
+      buttons: ['OK'],
+    });
   }
-  createWindow();
+  
+  // Create window after backend is ready (or failed to start)
+  try {
+    await createWindow();
+  } catch (err) {
+    console.error('Failed to create window:', err);
+  }
 });
 
-app.on('before-quit', () => {
-  stopBackend();
+app.on('will-quit', async (event) => {
+  // Prevent default quit to ensure backend stops properly
+  event.preventDefault();
+  
+  try {
+    await stopBackend();
+  } catch (err) {
+    console.error('Error stopping backend:', err);
+  }
+  
+  // Now allow the app to quit
+  app.exit(0);
 });
 
 app.on('window-all-closed', () => {

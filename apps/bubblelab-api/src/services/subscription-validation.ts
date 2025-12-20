@@ -188,6 +188,7 @@ export async function getMonthlyLimitForPlan(userId: string): Promise<{
 async function getUserSubscriptionInfo(
   userId: string
 ): Promise<UserSubscriptionInfo> {
+  let appType: AppType = AppType.BUBBLE_LAB;
   try {
     // Get user from Clerk to extract subscription info
     // Try to determine appType from user's database record first
@@ -195,14 +196,25 @@ async function getUserSubscriptionInfo(
       where: eq(users.clerkId, userId),
       columns: { appType: true },
     });
-    const appType = (dbUser?.appType as AppType) || AppType.BUBBLE_LAB;
+    appType = (dbUser?.appType as AppType) || AppType.BUBBLE_LAB;
 
     // Get the appropriate Clerk client for this app
     const appClerk = getClerkClient(appType) || clerk;
+    console.debug(
+      `[getUserSubscriptionInfo] Fetching Clerk user - userId: ${userId}, appType: ${appType}`
+    );
     const clerkUser = await appClerk?.users.getUser(userId);
 
     if (!clerkUser) {
-      throw new Error('User not found in Clerk');
+      console.error(
+        `[subscription-validation] User not found in Clerk - userId: ${userId}, appType: ${appType}`
+      );
+      // Return default subscription info instead of throwing
+      return {
+        appType: appType,
+        plan: 'pro_plus',
+        features: ['unlimited_usage'],
+      };
     }
 
     // Check for plan override in private metadata (for special users who bypass subscription system)
@@ -241,12 +253,12 @@ async function getUserSubscriptionInfo(
     };
   } catch (err) {
     console.error(
-      '[subscription-validation] Error getting user subscription info:',
+      `[subscription-validation] Error getting user subscription info - userId: ${userId}, appType: ${appType}:`,
       err
     );
     // Return default subscription info as fallback
     return {
-      appType: AppType.BUBBLE_LAB,
+      appType: appType,
       plan: 'pro_plus',
       features: ['unlimited_usage'],
     };

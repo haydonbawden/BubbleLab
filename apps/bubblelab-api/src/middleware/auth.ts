@@ -163,6 +163,9 @@ export async function authMiddleware(c: Context, next: Next) {
     const clerkClient = getClerkClient(appType);
     if (clerkClient) {
       try {
+        console.debug(
+          `[authMiddleware] Fetching Clerk user - userId: ${userId}, appType: ${appType}`
+        );
         const clerkUser = await clerkClient.users.getUser(userId);
         if (clerkUser) {
           // Check for plan override in private metadata (for special users who bypass subscription system)
@@ -196,7 +199,7 @@ export async function authMiddleware(c: Context, next: Next) {
         }
       } catch (err) {
         console.error(
-          '[authMiddleware] Failed to fetch user from Clerk for private metadata check',
+          `[authMiddleware] Failed to fetch user from Clerk for private metadata check - userId: ${userId}, appType: ${appType}`,
           err
         );
         // Continue with JWT payload values if fetch fails
@@ -222,6 +225,9 @@ export async function authMiddleware(c: Context, next: Next) {
         // --- Optional: persist / update user record in DB (lightweight upsert) ---
         try {
           if (clerkClient) {
+            console.debug(
+              `[authMiddleware] Fetching Clerk user for DB upsert - userId: ${userId}, appType: ${appType}`
+            );
             const clerkUser = await clerkClient.users.getUser(userId);
             if (clerkUser) {
               // Update Clerk user metadata with subscription features
@@ -272,7 +278,10 @@ export async function authMiddleware(c: Context, next: Next) {
             }
           }
         } catch (err) {
-          console.error('Failed to upsert user', err);
+          console.error(
+            `Failed to upsert user - userId: ${userId}, appType: ${appType}`,
+            err
+          );
         }
 
         return await next();
